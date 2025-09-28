@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sound Page</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body, html {margin:0;padding:0;height:100%;}
+        button {
+            width:100%;height:100%;border:none;
+            background:red;color:white;font-size:24px;
+        }
+    </style>
+</head>
+<body>
+    <button onclick="playSound()">TAP FOR SOUND</button>
+    
+    <audio id="audio" src="https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-jump-coin-216.mp3"></audio>
+
+    <script>
+        function playSound() {
+            document.getElementById('audio').play();
+            document.querySelector('button').innerHTML = 'SOUND PLAYING!';
+            document.querySelector('button').style.background = 'green';
+        }
+    </script>
+</body>
+</html>
